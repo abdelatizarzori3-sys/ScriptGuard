@@ -14,7 +14,8 @@ const CONFIG = {
 const State = {
   tab: 'upload', analyzing: false, result: null, filter: 'all',
   user: JSON.parse(localStorage.getItem('sg_user') || 'null'),
-  token: localStorage.getItem('sg_token') || null
+  token: localStorage.getItem('sg_token') || null,
+  zipFiles: []
 };
 
 const MockData = {
@@ -95,6 +96,7 @@ function initKeyboard() {
   document.addEventListener('keydown', e => {
     if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && State.tab === 'paste' && !State.analyzing) analyzePastedCode();
     if (e.key === 'Escape' && State.result) resetApp();
+    if (e.key === 'Escape' && !$('file-manager-modal')?.classList.contains('hidden')) hideFileManager();
   });
 }
 
@@ -178,7 +180,7 @@ async function checkApiStatus() {
 
 function switchTab(tab) {
   State.tab = tab;
-  ['upload','paste','history'].forEach(t => {
+  ['upload','paste','history','translate'].forEach(t => {
     const btn = $(`tab-${t}`);
     const zone = $(`${t}-zone`);
     if (t === tab) { btn.classList.add('active'); btn.classList.remove('text-gray-400'); zone.classList.remove('hidden'); }
@@ -187,7 +189,197 @@ function switchTab(tab) {
   if (tab === 'history') loadHistory();
 }
 
+const TranslationDictionary = {
+  'مرحبا': 'Hello', 'مرحباً': 'Hello', 'بالعالم': 'world', 'العالم': 'world', 'اسم': 'name', 'رسالة': 'message', 'خطأ': 'error', 'نجاح': 'success', 'ابدأ': 'Start', 'توقف': 'Stop', 'احفظ': 'Save', 'بيانات': 'data', 'مستخدم': 'user', 'المستخدم': 'the user', 'معالجة': 'processing', 'النتيجة': 'result', 'هذا': 'this', 'نص': 'text', 'اختبار': 'test', 'جاري': 'In progress', 'تم': 'Done'
+};
+
+function translateTextPreservingWords(text, direction) {
+  const entries = Object.entries(TranslationDictionary);
+  if (direction === 'en-ar') {
+    const reverse = { Hello: 'مرحبا', world: 'العالم', name: 'اسم', message: 'رسالة', error: 'خطأ', success: 'نجاح', Start: 'ابدأ', Stop: 'توقف', Save: 'احفظ', data: 'بيانات', user: 'مستخدم', result: 'النتيجة', text: 'نص', test: 'اختبار', Done: 'تم' };
+    return text.replace(/\b[A-Za-z][A-Za-z _-]*\b/g, word => reverse[word.trim()] || word);
+  }
+  let result = text;
+  entries.sort((a, b) => b[0].length - a[0].length).forEach(([from, to]) => { result = result.split(from).join(to); });
+  return result;
+}
+
+function translatePythonSource(source, direction) {
+  const tokenPattern = /(#[^\n]*|(?:[rubfRUBF]{0,2})(?:"(?:\\.|[^"\n])*"|'(?:\\.|[^'\n])*'))/g;
+  return source.replace(tokenPattern, token => {
+    const match = token.match(/^((?:[rubfRUBF]{0,2}))(.*)$/s);
+    if (!match) return token;
+    const prefix = match[1]; const body = match[2];
+    if (body.startsWith('#')) return prefix + translateTextPreservingWords(body, direction);
+    const quote = body[0]; const end = body[body.length - 1];
+    if ((quote !== '"' && quote !== "'") || end !== quote) return token;
+    return prefix + quote + translateTextPreservingWords(body.slice(1, -1), direction) + quote;
+  });
+}
+
+function translatePythonCode() {
+  const input = $('translate-input'); const output = $('translate-output'); const status = $('translate-status');
+  if (!input || !output || !input.value.trim()) { showToast('⚠️ أدخل كود Python أولاً', 'warning'); return; }
+  const direction = $('translate-direction')?.value || 'ar-en';
+  output.value = translatePythonSource(input.value, direction);
+  if (status) status.textContent = 'تمت ترجمة التعليقات والسلاسل فقط — البنية محفوظة';
+  showToast('✅ تمت الترجمة الآمنة محليًا', 'success');
+}
+
+async function copyTranslatedCode() {
+  const output = $('translate-output');
+  if (!output?.value) { showToast('⚠️ لا توجد نتيجة لنسخها', 'warning'); return; }
+  await navigator.clipboard?.writeText(output.value);
+  showToast('✅ تم نسخ النتيجة', 'success');
+}
+
 function handleFileSelect(e) { if (e.target.files.length) processFile(e.target.files[0]); }
+
+function showFileManager() {
+  const modal = $('file-manager-modal');
+  if (!modal) return;
+  modal.classList.remove('hidden');
+  modal.classList.add('flex');
+  renderZipFiles();
+}
+
+function hideFileManager() {
+  const modal = $('file-manager-modal');
+  if (!modal) return;
+  modal.classList.add('hidden');
+  modal.classList.remove('flex');
+}
+
+function handleZipFiles(e) {
+  const files = Array.from(e.target.files || []);
+  const known = new Set(State.zipFiles.map(item => `${item.file.name}:${item.file.size}:${item.file.lastModified}`));
+  files.forEach(file => {
+    const key = `${file.name}:${file.size}:${file.lastModified}`;
+    if (!known.has(key)) {
+      State.zipFiles.push({ file, path: file.webkitRelativePath || file.name, text: null });
+      known.add(key);
+    }
+  });
+  e.target.value = '';
+  renderZipFiles();
+}
+
+function removeZipFile(index) {
+  State.zipFiles.splice(index, 1);
+  renderZipFiles();
+}
+
+function clearZipFiles() {
+  State.zipFiles = [];
+  renderZipFiles();
+}
+
+function formatBytes(bytes) {
+  if (!bytes) return '0 بايت';
+  const units = ['بايت', 'ك.ب', 'م.ب', 'ج.ب'];
+  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  return `${(bytes / Math.pow(1024, i)).toFixed(i ? 1 : 0)} ${units[i]}`;
+}
+
+function renderZipFiles() {
+  const list = $('zip-file-list');
+  const count = $('zip-file-count');
+  if (!list || !count) return;
+  count.textContent = `${State.zipFiles.length} ملف`;
+  list.replaceChildren();
+  if (!State.zipFiles.length) {
+    const empty = document.createElement('p');
+    empty.className = 'text-center text-sm text-gray-500 py-5';
+    empty.textContent = 'لم تتم إضافة ملفات بعد';
+    list.appendChild(empty);
+    return;
+  }
+  State.zipFiles.forEach((item, index) => {
+    const row = document.createElement('div');
+    row.className = 'flex items-center gap-3 rounded-lg bg-white/5 border border-white/10 px-3 py-2';
+    const icon = document.createElement('i');
+    icon.className = 'fas fa-file-code text-cyan-400';
+    const info = document.createElement('div');
+    info.className = 'min-w-0 flex-1';
+    const name = document.createElement('p');
+    name.className = 'text-sm truncate';
+    name.title = item.path;
+    name.textContent = item.path;
+    const size = document.createElement('p');
+    size.className = 'text-[11px] text-gray-500';
+    size.textContent = formatBytes(item.file.size);
+    info.append(name, size);
+    const edit = document.createElement('button');
+    edit.type = 'button';
+    edit.className = 'px-2 py-1 rounded-lg text-cyan-300 hover:bg-cyan-500/10 text-xs';
+    edit.title = 'قراءة وتحرير الملف';
+    edit.innerHTML = '<i class="fas fa-pen-to-square"></i>';
+    edit.addEventListener('click', () => editZipFile(index));
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'w-8 h-8 rounded-lg text-red-300 hover:bg-red-500/10';
+    remove.title = 'إزالة الملف';
+    remove.setAttribute('aria-label', `إزالة ${item.file.name}`);
+    remove.innerHTML = '<i class="fas fa-trash-can"></i>';
+    remove.addEventListener('click', () => removeZipFile(index));
+    row.append(icon, info, edit, remove);
+    list.appendChild(row);
+  });
+}
+
+async function editZipFile(index) {
+  const item = State.zipFiles[index];
+  const editor = $('file-editor'); const textarea = $('file-editor-text'); const title = $('file-editor-title'); const status = $('file-editor-status');
+  if (!item || !editor || !textarea) return;
+  try {
+    const text = item.text !== null ? item.text : await item.file.text();
+    item.text = text;
+    State.activeZipIndex = index;
+    textarea.value = text;
+    title.textContent = item.path;
+    status.textContent = 'تمت القراءة محليًا';
+    editor.classList.remove('hidden');
+    textarea.focus();
+  } catch (error) { console.error(error); showToast('❌ تعذر قراءة الملف النصي', 'error'); }
+}
+
+function saveEditedFile() {
+  const index = State.activeZipIndex;
+  const item = State.zipFiles[index]; const textarea = $('file-editor-text'); const status = $('file-editor-status');
+  if (!item || !textarea) return;
+  item.text = textarea.value;
+  item.file = new File([item.text], item.file.name, { type: item.file.type || 'text/plain', lastModified: Date.now() });
+  if (status) status.textContent = 'تم الحفظ محليًا داخل الحزمة';
+  renderZipFiles();
+  showToast('✅ تم حفظ التعديلات محليًا', 'success');
+}
+
+function closeFileEditor() {
+  $('file-editor')?.classList.add('hidden');
+  State.activeZipIndex = null;
+}
+
+async function downloadZip() {
+  if (!State.zipFiles.length) { showToast('⚠️ أضف ملفًا واحدًا على الأقل', 'warning'); return; }
+  if (typeof JSZip === 'undefined') { showToast('❌ تعذر تحميل أداة ZIP، تحقق من الاتصال ثم أعد المحاولة', 'error'); return; }
+  try {
+    const zip = new JSZip();
+    State.zipFiles.forEach(item => zip.file(item.path, item.text !== null ? item.text : item.file));
+    const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `scriptguard-files-${new Date().toISOString().slice(0, 10)}.zip`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    showToast('✅ تم إنشاء ملف ZIP وتنزيله محليًا', 'success');
+  } catch (err) {
+    console.error('ZIP creation failed', err);
+    showToast('❌ تعذر إنشاء ملف ZIP', 'error');
+  }
+}
 
 function processFile(file) {
   const ext = '.' + file.name.split('.').pop().toLowerCase();

@@ -17,6 +17,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-java.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-go.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-php.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script>
     tailwind.config = {
       theme: {
@@ -97,6 +98,9 @@
             </span>
             <button onclick="logout()" class="text-xs text-red-400 hover:text-red-300 px-2 py-1">خروج</button>
           </div>
+          <button onclick="showFileManager()" class="text-xs bg-purple-500/20 text-purple-300 px-3 py-1.5 rounded-lg border border-purple-400/30 hover:bg-purple-500/30 transition" title="إدارة الملفات وإنشاء ZIP">
+            <i class="fas fa-folder-open mr-1"></i> الملفات
+          </button>
           <button id="login-btn" onclick="showLoginModal()" class="text-xs bg-cyan-500/20 text-cyan-400 px-3 py-1.5 rounded-lg border border-cyan-500/30 hover:bg-cyan-500/30 transition">
             <i class="fas fa-sign-in-alt mr-1"></i> دخول
           </button>
@@ -124,6 +128,51 @@
           </button>
         </div>
         <button onclick="hideLoginModal()" class="mt-4 text-xs text-gray-500 hover:text-gray-300 w-full text-center">إغلاق</button>
+      </div>
+    </div>
+
+    <div id="file-manager-modal" class="fixed inset-0 z-[65] hidden items-center justify-center bg-black/70 backdrop-blur-sm p-4" role="dialog" aria-modal="true" aria-labelledby="file-manager-title">
+      <div class="glass-s rounded-2xl w-full max-w-2xl max-h-[88vh] overflow-hidden animate-scale-in">
+        <div class="flex items-center justify-between gap-4 px-5 py-4 border-b border-white/10">
+          <div>
+            <h2 id="file-manager-title" class="text-lg font-bold flex items-center gap-2"><i class="fas fa-folder-open text-purple-300"></i> مدير الملفات</h2>
+            <p class="text-xs text-gray-400 mt-1">أضف ملفاتك محليًا وأنشئ ZIP دون رفع تلقائي</p>
+          </div>
+          <button onclick="hideFileManager()" class="w-9 h-9 rounded-lg glass text-gray-400 hover:text-white" aria-label="إغلاق مدير الملفات"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="p-5 space-y-4 overflow-y-auto max-h-[calc(88vh-150px)]">
+          <label for="zip-file-input" class="dz block rounded-xl p-5 text-center cursor-pointer hover:bg-cyan-500/5">
+            <i class="fas fa-file-circle-plus text-2xl text-cyan-400 mb-2"></i>
+            <span class="block text-sm font-semibold">اختر ملفات لإضافتها إلى الحزمة</span>
+            <span class="block text-xs text-gray-500 mt-1">الملفات تبقى داخل المتصفح حتى تضغط تنزيل ZIP</span>
+          </label>
+          <input id="zip-file-input" type="file" multiple class="hidden" onchange="handleZipFiles(event)">
+          <label for="zip-folder-input" class="block rounded-xl border border-purple-400/20 bg-purple-500/5 p-4 text-center cursor-pointer hover:bg-purple-500/10 transition">
+            <i class="fas fa-folder-tree text-xl text-purple-300 mb-1"></i>
+            <span class="block text-sm font-semibold">قراءة مجلد كامل</span>
+            <span class="block text-xs text-gray-500 mt-1">يتم الحفاظ على المسارات الداخلية للمجلد</span>
+          </label>
+          <input id="zip-folder-input" type="file" webkitdirectory directory multiple class="hidden" onchange="handleZipFiles(event)">
+          <div class="flex items-center justify-between text-xs text-gray-400"><span id="zip-file-count">0 ملف</span><button onclick="clearZipFiles()" class="text-red-300 hover:text-red-200">إزالة الكل</button></div>
+          <div id="zip-file-list" class="space-y-2 min-h-20 rounded-xl border border-white/10 bg-black/10 p-3" aria-live="polite">
+            <p class="text-center text-sm text-gray-500 py-5">لم تتم إضافة ملفات بعد</p>
+          </div>
+          <section id="file-editor" class="hidden rounded-xl border border-cyan-400/20 bg-black/20 p-3" aria-labelledby="file-editor-title">
+            <div class="flex items-center justify-between gap-3 mb-2">
+              <h3 id="file-editor-title" class="text-sm font-semibold text-cyan-200 truncate">محرر الملف</h3>
+              <span id="file-editor-status" class="text-[11px] text-gray-500">قراءة محلية</span>
+            </div>
+            <textarea id="file-editor-text" class="ce w-full h-48 rounded-lg p-3 text-sm text-gray-200 resize-y focus:outline-none" spellcheck="false" aria-label="محتوى الملف"></textarea>
+            <div class="flex justify-end gap-2 mt-3">
+              <button onclick="closeFileEditor()" class="px-4 py-2 rounded-lg glass text-xs">إلغاء</button>
+              <button onclick="saveEditedFile()" class="px-4 py-2 rounded-lg bg-cyan-500/20 text-cyan-200 border border-cyan-400/30 text-xs font-semibold">حفظ التعديلات</button>
+            </div>
+          </section>
+        </div>
+        <div class="flex flex-col sm:flex-row gap-3 px-5 py-4 border-t border-white/10">
+          <button onclick="downloadZip()" class="flex-1 py-3 rounded-xl bg-gradient-to-r from-purple-500 to-cyan-500 font-bold text-sm hover:from-purple-400 hover:to-cyan-400 transition nb"><i class="fas fa-file-zipper mr-2"></i> إنشاء وتنزيل ZIP</button>
+          <button onclick="hideFileManager()" class="sm:w-32 py-3 rounded-xl glass text-sm font-semibold hover:bg-white/10">إغلاق</button>
+        </div>
       </div>
     </div>
 
@@ -157,6 +206,9 @@
           </button>
           <button onclick="switchTab('history')" id="tab-history" class="tb px-5 py-2.5 rounded-lg text-sm font-semibold transition-all duration-300 text-gray-400 flex items-center gap-2">
             <i class="fas fa-history"></i><span>السجل</span>
+          </button>
+          <button onclick="switchTab('translate')" id="tab-translate" class="tb px-5 py-2.5 rounded-lg text-sm font-semibold transition-all duration-300 text-gray-400 flex items-center gap-2">
+            <i class="fas fa-language"></i><span>مترجم Python</span>
           </button>
         </div>
       </div>
@@ -208,6 +260,19 @@
               <i class="fas fa-search"></i> فحص الكود
             </button>
           </div>
+        </div>
+      </div>
+
+      <div id="translate-zone" class="hidden animate-slide-up">
+        <div class="glass-s rounded-2xl p-4 sm:p-6">
+          <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+            <label class="text-sm font-semibold text-gray-300 flex items-center gap-2"><i class="fas fa-language text-cyan-400"></i> مترجم نصوص Python</label>
+            <div class="flex items-center gap-2 text-xs text-gray-400"><select id="translate-direction" class="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-gray-300"><option value="ar-en">العربية ← الإنجليزية</option><option value="en-ar">الإنجليزية ← العربية</option></select><span class="px-2 py-1 rounded bg-cyan-500/10 text-cyan-300">يحافظ على البنية</span></div>
+          </div>
+          <p class="text-xs text-gray-400 mb-4 leading-relaxed">تتم ترجمة التعليقات والسلاسل النصية فقط، بينما تبقى أسماء المتغيرات والكلمات المحجوزة وعلامات Python كما هي.</p>
+          <textarea id="translate-input" class="ce w-full h-64 rounded-xl p-4 text-sm text-gray-300 resize-y focus:outline-none" placeholder="# اكتب كود Python هنا\nprint('مرحبا')" spellcheck="false"></textarea>
+          <div class="flex flex-wrap items-center justify-between gap-3 mt-3"><span id="translate-status" class="text-xs text-gray-500">جاهز للترجمة المحلية الآمنة</span><button onclick="translatePythonCode()" class="nb px-6 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 font-bold text-sm hover:from-cyan-400 hover:to-blue-500 transition flex items-center gap-2"><i class="fas fa-wand-magic-sparkles"></i> ترجمة النصوص</button></div>
+          <div class="mt-4"><div class="flex items-center justify-between mb-2"><span class="text-sm font-semibold text-gray-300">النتيجة</span><button onclick="copyTranslatedCode()" class="text-xs text-cyan-300 hover:text-cyan-200">نسخ النتيجة</button></div><textarea id="translate-output" class="ce w-full h-64 rounded-xl p-4 text-sm text-gray-300 resize-y focus:outline-none" readonly spellcheck="false" aria-label="النص المترجم"></textarea></div>
         </div>
       </div>
 
