@@ -141,7 +141,7 @@ async function checkApiStatus() {
     const input = encodeURIComponent(JSON.stringify({ 0: { json: { timestamp: Date.now() } } }));
     const res = await fetch(`${CONFIG.API_BASE}/api/trpc/system.health?batch=1&input=${input}`, { method: 'GET', signal: AbortSignal.timeout(5000) });
     const health = await res.json().catch(() => null);
-    if (res.ok && health?.[0]?.result?.data?.json?.ok) { CONFIG.LLM_READY = true; CONFIG.DEMO_MODE = false; dot.className = 'w-2 h-2 rounded-full bg-green-500'; text.textContent = 'متصل بالخادم — التحليل الذكي متاح'; text.className = 'text-green-400'; }
+    if (res.ok && health?.[0]?.result?.data?.json?.ok) { CONFIG.LLM_READY = true; CONFIG.DEMO_MODE = false; dot.className = 'w-2 h-2 rounded-full bg-green-500'; text.textContent = 'متصل بالخادم — سيظهر مصدر التقرير بعد الفحص'; text.className = 'text-green-400'; }
     else throw new Error();
   } catch {
     dot.className = 'w-2 h-2 rounded-full bg-red-500';
@@ -159,8 +159,55 @@ async function requestCodeAnalysis(code, fileName) {
   });
   const payload = await response.json().catch(() => null);
   const result = payload?.[0]?.result?.data?.json;
-  if (!response.ok || !result) throw new Error('تعذر الوصول إلى خدمة التحليل.');
-  return result;
+  const remoteMessage = payload?.[0]?.error?.json?.message;
+  if (!response.ok || !result) throw new Error(remoteMessage || `تعذر الوصول إلى خدمة التحليل (${response.status}).`);
+  return { ...result, fileName, analysisMode: 'server' };
+}
+
+function lineAt(source, index) {
+  return source.slice(0, Math.max(0, index)).split('\n').length;
+}
+
+function codeLine(source, line) {
+  return source.split('\n')[line - 1]?.trim().slice(0, 220) || '';
+}
+
+function localAnalysisStatus(safety) {
+  if (safety < 45) return { statusTitle: '🚨 تم العثور على مخاطر عالية', statusDesc: 'هذه نتيجة قواعد محلية محدودة؛ راجع كل مشكلة قبل تشغيل الكود أو نشره.', statusBadge: 'مراجعة عاجلة', statusBadgeClass: 'bg-red-500/20 text-red-400 border border-red-500/30', statusIcon: '⚠️', statusIconBg: 'bg-red-500/20' };
+  if (safety < 75) return { statusTitle: '⚡ توجد نقاط تحتاج مراجعة', statusDesc: 'التحليل المحلي التقط أنماطًا شائعة فقط، وليس ضمانًا لأمان الكود.', statusBadge: 'راجع النتائج', statusBadgeClass: 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30', statusIcon: '🔎', statusIconBg: 'bg-yellow-500/20' };
+  return { statusTitle: '🔎 لم تكتشف القواعد المحلية خطرًا عاليًا', statusDesc: 'هذه ليست شهادة أمان؛ أُجري فحص قواعد محدود على النص المتاح فقط.', statusBadge: 'مراجعة أولية', statusBadgeClass: 'bg-blue-500/20 text-blue-400 border border-blue-500/30', statusIcon: '🧭', statusIconBg: 'bg-blue-500/20' };
+}
+
+function buildLocalRuleAnalysis(code, fileName, failureReason) {
+  const issues = [];
+  const add = (match, severity, type, title, description) => {
+    if (!match || match.index < 0) return;
+    const line = lineAt(code, match.index);
+    issues.push({ id: issues.length + 1, severity, type, title, description, line, code: codeLine(code, line), icon: severity === 'critical' ? '🚨' : severity === 'high' ? '⚠️' : '💡' });
+  };
+  add(code.match(/\b(eval|exec)\s*\(/i), 'critical', 'critical', 'تنفيذ ديناميكي محتمل الخطورة', 'وجدت eval أو exec. لا تمرر أي إدخال غير موثوق إلى هذه الدوال؛ استبدلها بتحليل أو تحويل آمن ومحدد.');
+  add(code.match(/\b(?:api[_-]?key|secret|password|token)\s*=\s*['"][^'"\n]{6,}['"]/i), 'high', 'warning', 'سر محتمل مكتوب داخل الكود', 'يبدو أن قيمة حساسة مكتوبة مباشرة في المصدر. انقلها إلى متغير بيئة أو مدير أسرار، ثم بدّلها إذا كانت قيمة حقيقية.');
+  add(code.match(/\b(?:cursor|db|connection)\.(?:execute|query)\s*\([^\n]*(?:\+|f['"]|\.format\()/i), 'high', 'warning', 'استعلام قاعدة بيانات مركب ديناميكيًا', 'قد يؤدي دمج مدخلات المستخدم داخل الاستعلام إلى حقن SQL. استخدم معاملات مُعلّمة في مكتبة قاعدة البيانات.');
+  add(code.match(/\.innerHTML\s*=/i), 'high', 'warning', 'إدراج HTML مباشر', 'تعيين innerHTML بمحتوى متغير قد يفتح ثغرة XSS. استخدم textContent أو تطهيرًا موثوقًا للمحتوى.');
+  add(code.match(/\bshell\s*=\s*True\b/i), 'high', 'warning', 'تشغيل أمر shell', 'تشغيل الأوامر عبر shell=True يزيد خطر حقن الأوامر. مرّر قائمة وسائط ثابتة وتجنب دمج نصوص غير موثوقة.');
+  const nested = code.match(/\b(?:for|while)\b[\s\S]{0,500}\b(?:for|while)\b/i);
+  add(nested, 'medium', 'warning', 'حلقة متداخلة محتملة', 'قد تؤدي الحلقات المتداخلة إلى بطء مع البيانات الكبيرة. راجع التعقيد الزمني واستخدم هياكل بيانات مناسبة عند الإمكان.');
+  if (!issues.length) {
+    issues.push({ id: 1, severity: 'low', type: 'info', title: 'لم تتطابق قواعد الخطر الشائعة', description: 'هذه المراجعة المحلية فحصت أنماطًا محددة مثل التنفيذ الديناميكي والأسرار والاستعلامات المركبة. لا تغطي كل الأخطاء أو الثغرات.', line: 1, code: codeLine(code, 1), icon: '💡' });
+  }
+  const penalties = { critical: 35, high: 20, medium: 10, low: 0 };
+  const safety = Math.max(15, 95 - issues.reduce((total, issue) => total + (penalties[issue.severity] || 0), 0));
+  return { fileName, language: detectLanguage(fileName), safety, efficiency: nested ? 65 : 82, quality: issues.length > 1 ? 62 : 78, issues, fixCode: code, analysisMode: 'local-rules', model: 'scriptguard-local-rules', failureReason, ...localAnalysisStatus(safety) };
+}
+
+function renderAnalysisSource(data) {
+  const source = $('analysis-source');
+  if (!source) return;
+  const isLocalRules = data.analysisMode === 'local-rules' || data.model === 'scriptguard-local-rules' || data.model === 'scriptguard-rules';
+  source.className = `rounded-xl border px-4 py-3 text-xs leading-relaxed ${isLocalRules ? 'border-amber-500/30 bg-amber-500/10 text-amber-100' : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-100'}`;
+  source.textContent = isLocalRules
+    ? `مصدر التقرير: قواعد محلية محدودة على الجهاز. ${data.failureReason ? `تعذر تحليل الخادم: ${data.failureReason}` : 'لا يعتبر هذا التقرير ضمانًا لأمان الكود.'}`
+    : `مصدر التقرير: خادم ScriptGuard (${data.model || 'تحليل خادم'}). النتيجة استشارية وليست ضمانًا لأمان الكود.`;
 }
 
 function switchTab(tab) {
@@ -485,10 +532,8 @@ async function startAnalysis(code, fileName, preloaded = null) {
       resultData = await requestCodeAnalysis(code, fileName);
     } catch (err) {
       console.error('ScriptGuard analysis failed:', err);
-      State.analyzing = false;
-      resetApp();
-      showToast('تعذر الاتصال بخدمة التحليل. تحقق من الإنترنت ثم أعد المحاولة.', 'error');
-      return;
+      resultData = buildLocalRuleAnalysis(code, fileName, err?.message || 'خطأ اتصال غير محدد');
+      showToast('تم الفحص بقواعد محلية لأن تقرير الخادم لم يكتمل.', 'warning');
     }
   } else if (!resultData) {
     resultData = determineMockResult(fileName, code);
@@ -496,9 +541,10 @@ async function startAnalysis(code, fileName, preloaded = null) {
 
   State.result = resultData;
   renderResults(resultData);
+  renderAnalysisSource(resultData);
   $('results-dashboard').classList.add('show');
   State.analyzing = false;
-  showToast('✅ تم الانتهاء من التحليل!', 'success');
+  if (resultData.analysisMode !== 'local-rules') showToast('✅ تم الانتهاء من التحليل وعرض التقرير.', 'success');
 }
 
 function detectLanguage(fileName) {
