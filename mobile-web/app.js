@@ -249,9 +249,14 @@ async function translatePythonCode() {
   if (status) status.textContent = 'جاري تحليل النص وحماية البنية...';
   if (CONFIG.LLM_READY) {
     try {
-      const response = await fetch(`${CONFIG.API_BASE}/api/translate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: input.value, direction }) });
-      const data = await response.json();
-      if (!response.ok || typeof data.code !== 'string') throw new Error(data.error || 'Translation API failed');
+      const response = await fetch(`${CONFIG.API_BASE}/api/trpc/ai.translatePython?batch=1`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 0: { json: { code: input.value, direction } } })
+      });
+      const payload = await response.json().catch(() => null);
+      const data = payload?.[0]?.result?.data?.json;
+      if (!response.ok || typeof data?.code !== 'string') throw new Error('Translation API failed');
       output.value = data.code; if (status) status.textContent = 'ترجمة خادمة حقيقية — البنية والتعبيرات محمية'; if (warning) warning.textContent = 'تمت الترجمة عبر الخادم؛ لا ترسل أسرارًا أو مفاتيح خاصة.';
       showToast('✅ تمت الترجمة عبر الذكاء الاصطناعي', 'success'); return;
     } catch (error) { console.warn('Server translation failed; using local parser', error); }
@@ -422,7 +427,20 @@ function processFile(file) {
   if (!CONFIG.SUPPORTED_EXTS.includes(ext)) { showToast('❌ نوع الملف غير مدعوم: ' + ext, 'error'); return; }
   if (file.size > CONFIG.MAX_FILE_SIZE) { showToast('❌ حجم الملف يتجاوز 5 ميجابايت', 'error'); return; }
   const reader = new FileReader();
-  reader.onload = ev => startAnalysis(ev.target.result, file.name);
+  reader.onload = ev => {
+    const code = typeof ev.target?.result === 'string' ? ev.target.result : '';
+    if (ext === '.py') {
+      const translatorInput = $('translate-input');
+      if (!translatorInput) { showToast('❌ تعذر فتح مترجم Python', 'error'); return; }
+      translatorInput.value = code;
+      switchTab('translate');
+      const status = $('translate-status');
+      if (status) status.textContent = `تم تحميل ${file.name}. تبدأ الترجمة الآن...`;
+      translatePythonCode();
+      return;
+    }
+    startAnalysis(code, file.name);
+  };
   reader.readAsText(file);
 }
 
