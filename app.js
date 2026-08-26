@@ -682,7 +682,19 @@ function showToast(msg, type = 'success') {
 
 function escapeHtml(text) { const div = document.createElement('div'); div.textContent = text; return div.innerHTML; }
 
+function initRobotInterface() {
+  const stage = $('robot-stage'); const model = $('robot-model'); const status = $('robot-status-text');
+  if (!stage || !model) return;
+  const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  const setPose = (x, y) => { if (reduced) return; model.style.transform = `rotateX(${y * -5}deg) rotateY(${x * 8}deg) translateZ(8px)`; };
+  stage.addEventListener('pointermove', event => { const rect = stage.getBoundingClientRect(); setPose((event.clientX - rect.left) / rect.width - .5, (event.clientY - rect.top) / rect.height - .5); });
+  stage.addEventListener('pointerleave', () => { model.style.transform = ''; });
+  stage.addEventListener('click', () => { model.classList.remove('robot-scan'); void model.offsetWidth; model.classList.add('robot-scan'); if (status) status.textContent = 'فحص بصري نشط — النواة تستجيب'; showToast('🤖 الروبوت جاهز لاستقبال أمرك', 'success'); });
+  stage.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); stage.click(); } });
+}
+
 console.log('🛡️ ScriptGuard AI Full-Stack v1.0');
 console.log('👤 Owner & Lead Developer: Abdelati Zarzori');
 console.log('💡 Tips: Ctrl+Enter = Analyze | Escape = Reset');
 console.log('🔌 API:', CONFIG.API_BASE);
+if (typeof document !== 'undefined') document.addEventListener('DOMContentLoaded', initRobotInterface);
