@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">ScriptGuard</string>
+    <string name="title_activity_main">ScriptGuard</string>
+    <string name="package_name">com.abdelatizarzori.scriptguard</string>
+    <string name="custom_url_scheme">com.abdelatizarzori.scriptguard</string>
+</resources>
