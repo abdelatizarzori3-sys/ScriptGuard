@@ -6,7 +6,9 @@ ScriptGuard AI is a browser-based code review workspace for inspecting source fi
 
 ## Current capabilities
 
-The Python translator processes comments and quoted string literals while preserving Python keywords, identifiers, operators, indentation, and file structure. The file manager accepts multiple files or a complete directory, preserves relative paths, provides local read/edit/save controls for text files, and creates a downloadable ZIP without automatic upload.
+The Python translator scans comments and single, double, and triple-quoted string literals while preserving Python keywords, identifiers, operators, indentation, and file structure. It protects f-string expressions and placeholders and leaves byte-string bodies unchanged. The file manager accepts multiple files or a complete directory, preserves relative paths, provides local read/edit/save controls for text files, and creates a downloadable ZIP without automatic upload.
+
+The local translator is a structure-preserving fallback, not a complete natural-language engine: unfamiliar words may remain untranslated, malformed or unterminated Python strings are not rewritten, and the UI warns the user when the server translation route is unavailable. For complete language translation, configure the server and use `POST /api/translate`; review all generated code before execution.
 
 The code-analysis screen can use the configured API when available. If the API cannot be reached, the interface falls back to clearly labelled local demonstration data; demonstration results must not be treated as a real security audit.
 
@@ -27,6 +29,10 @@ The current frontend defaults to `http://localhost:3000`. The repository now inc
 ## Privacy and safety
 
 Files selected in the ZIP manager remain in browser memory and are not uploaded automatically. Editing a file changes only the in-memory ZIP item until the user downloads the archive. Do not upload secrets, private keys, production credentials, or confidential source code to an analysis service unless the deployment's privacy policy and server configuration have been reviewed.
+
+## Tests
+
+Run `npm run test:translator` to exercise comments, docstrings, triple-quoted strings, escaped quotes, raw strings, byte strings, f-string expressions, nested braces, and identifier preservation. Run `node --check app.js` and `node --check server.mjs` for syntax validation.
 
 ## Developer
 

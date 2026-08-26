@@ -5,10 +5,10 @@
  */
 
 const CONFIG = {
-  API_BASE: 'http://localhost:3000',
+  API_BASE: window.SCRIPTGUARD_API_BASE || localStorage.getItem('sg_api_base') || 'http://localhost:3000',
   MAX_FILE_SIZE: 5 * 1024 * 1024,
   SUPPORTED_EXTS: ['.py','.js','.ts','.cs','.gd','.java','.go','.php','.rb','.cpp','.c','.h'],
-  DEMO_MODE: false
+  DEMO_MODE: false, LLM_READY: false
 };
 
 const State = {
@@ -168,13 +168,14 @@ async function checkApiStatus() {
   const text = $('api-text');
   try {
     const res = await fetch(`${CONFIG.API_BASE}/api/health`, { method: 'GET', signal: AbortSignal.timeout(3000) });
-    if (res.ok) { dot.className = 'w-2 h-2 rounded-full bg-green-500'; text.textContent = 'متصل بالخادم'; text.className = 'text-green-400'; }
+    const health = await res.json().catch(() => ({}));
+    if (res.ok) { CONFIG.LLM_READY = Boolean(health.llmConfigured); CONFIG.DEMO_MODE = !CONFIG.LLM_READY; dot.className = 'w-2 h-2 rounded-full bg-green-500'; text.textContent = CONFIG.LLM_READY ? 'متصل بالخادم — الذكاء الاصطناعي متاح' : 'الخادم متصل — الترجمة المحلية الاحتياطية'; text.className = CONFIG.LLM_READY ? 'text-green-400' : 'text-yellow-400'; }
     else throw new Error();
   } catch {
     dot.className = 'w-2 h-2 rounded-full bg-yellow-500 animate-pulse';
     text.textContent = 'وضع العرض التجريبي (لا يوجد خادم)';
     text.className = 'text-yellow-400';
-    CONFIG.DEMO_MODE = true;
+    CONFIG.DEMO_MODE = true; CONFIG.LLM_READY = false;
   }
 }
 
@@ -222,6 +223,7 @@ function protectFStringExpressions(text) {
 }
 
 function translatePythonStringBody(body, prefix, direction) {
+  if (prefix.toLowerCase().includes('b')) return body;
   if (prefix.toLowerCase().includes('f')) {
     const protectedValue = protectFStringExpressions(body);
     let translated = translateTextPreservingWords(protectedValue.output, direction);
@@ -235,16 +237,16 @@ function translatePythonSource(source, direction) {
   let output = ''; let i = 0;
   while (i < source.length) {
     if (source[i] === '#') {
-      const end = source.indexOf('\\n', i);
+      const end = source.indexOf('\n', i);
       const stop = end === -1 ? source.length : end;
       output += translateTextPreservingWords(source.slice(i, stop), direction); i = stop; continue;
     }
-    const candidate = source.slice(i).match(/^([rubfRUBF]{0,2})('''|\\"\\"\\"|'\\"|')/);
+    const candidate = source.slice(i).match(/^([rubfRUBF]{0,2})('''|"""|'|")/);
     if (!candidate) { output += source[i++]; continue; }
     const prefix = candidate[1]; const delimiter = candidate[2]; const start = i + candidate[0].length;
     let j = start;
     while (j < source.length) {
-      if (source[j] === '\\\\') { j += 2; continue; }
+      if (source[j] === '\\') { j += 2; continue; }
       if (source.startsWith(delimiter, j)) break;
       j++;
     }
@@ -256,13 +258,24 @@ function translatePythonSource(source, direction) {
   return output;
 }
 
-function translatePythonCode() {
-  const input = $('translate-input'); const output = $('translate-output'); const status = $('translate-status');
+async function translatePythonCode() {
+  const input = $('translate-input'); const output = $('translate-output'); const status = $('translate-status'); const warning = $('translate-mode-warning');
   if (!input || !output || !input.value.trim()) { showToast('⚠️ أدخل كود Python أولاً', 'warning'); return; }
   const direction = $('translate-direction')?.value || 'ar-en';
+  if (status) status.textContent = 'جاري تحليل النص وحماية البنية...';
+  if (CONFIG.LLM_READY) {
+    try {
+      const response = await fetch(`${CONFIG.API_BASE}/api/translate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: input.value, direction }) });
+      const data = await response.json();
+      if (!response.ok || typeof data.code !== 'string') throw new Error(data.error || 'Translation API failed');
+      output.value = data.code; if (status) status.textContent = 'ترجمة خادمة حقيقية — البنية والتعبيرات محمية'; if (warning) warning.textContent = 'تمت الترجمة عبر الخادم؛ لا ترسل أسرارًا أو مفاتيح خاصة.';
+      showToast('✅ تمت الترجمة عبر الذكاء الاصطناعي', 'success'); return;
+    } catch (error) { console.warn('Server translation failed; using local parser', error); }
+  }
   output.value = translatePythonSource(input.value, direction);
-  if (status) status.textContent = 'تمت ترجمة التعليقات والسلاسل فقط — البنية محفوظة';
-  showToast('✅ تمت الترجمة الآمنة محليًا', 'success');
+  if (status) status.textContent = 'ترجمة محلية احتياطية — البنية محفوظة';
+  if (warning) warning.textContent = 'تنبيه: الخادم غير متاح أو غير مهيأ؛ الترجمة المحلية تغطي القاموس المتاح فقط. راجع النتيجة قبل الاستخدام.';
+  showToast('✅ تمت الترجمة المحلية الآمنة', 'success');
 }
 
 async function copyTranslatedCode() {

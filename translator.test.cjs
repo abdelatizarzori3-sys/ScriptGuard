@@ -14,13 +14,17 @@ const sandbox = {
 };
 vm.runInNewContext(source, sandbox);
 
-const input = `'''رسالة مرحبا\nللتوثيق'''\nname = 'العالم'\npath = r'بيانات/ملف'\ntext = f'مرحبا {name}'\n# اختبار نجاح`;
+const input = `'''رسالة مرحبا\nللتوثيق'''\n\"\"\"نجاح\"\"\"\nname = 'العالم'\npath = r'بيانات/ملف'\nquoted = \"رسالة \\\"مرحبا\\\"\"\nraw_bytes = b'KEEP_IDENTIFIER'\ntext = f'مرحبا {name.upper()} { {name: name} }'\n# اختبار نجاح`;
 const output = sandbox.translatePythonSource(input, 'ar-en');
 
 assert.match(output, /'''message Hello\nللتوثيق'''/);
+assert.match(output, /\"\"\"success\"\"\"/);
 assert.match(output, /name = 'world'/);
 assert.match(output, /path = r'data\/ملف'/);
-assert.match(output, /text = f'Hello \{name\}'/);
+assert.match(output, /raw_bytes = b'KEEP_IDENTIFIER'/);
+assert.match(output, /text = f'Hello \{name\.upper\(\)\} \{ \{name: name\} \}'/);
 assert.match(output, /# test success/);
-assert.equal((output.match(/name/g) || []).length, 2, 'identifier name must remain unchanged');
+assert.match(output, /name = 'world'/);
+assert.match(output, /\{name\.upper\(\)\}/);
+assert.match(output, /\{ \{name: name\} \}/);
 console.log('translator edge cases: OK');
