@@ -204,17 +204,56 @@ function translateTextPreservingWords(text, direction) {
   return result;
 }
 
+function protectFStringExpressions(text) {
+  const protectedParts = [];
+  let output = '';
+  for (let i = 0; i < text.length;) {
+    if (text[i] !== '{' || text[i + 1] === '{') { output += text[i]; i += text[i] === '{' ? 2 : 1; continue; }
+    let depth = 0; let j = i;
+    for (; j < text.length; j++) {
+      if (text[j] === '{') depth++;
+      if (text[j] === '}') { depth--; if (depth === 0) { j++; break; } }
+    }
+    if (depth !== 0) { output += text.slice(i); break; }
+    const marker = `__SG_EXPR_${protectedParts.length}__`;
+    protectedParts.push(text.slice(i, j)); output += marker; i = j;
+  }
+  return { output, protectedParts };
+}
+
+function translatePythonStringBody(body, prefix, direction) {
+  if (prefix.toLowerCase().includes('f')) {
+    const protectedValue = protectFStringExpressions(body);
+    let translated = translateTextPreservingWords(protectedValue.output, direction);
+    protectedValue.protectedParts.forEach((part, index) => { translated = translated.split(`__SG_EXPR_${index}__`).join(part); });
+    return translated;
+  }
+  return translateTextPreservingWords(body, direction);
+}
+
 function translatePythonSource(source, direction) {
-  const tokenPattern = /(#[^\n]*|(?:[rubfRUBF]{0,2})(?:"(?:\\.|[^"\n])*"|'(?:\\.|[^'\n])*'))/g;
-  return source.replace(tokenPattern, token => {
-    const match = token.match(/^((?:[rubfRUBF]{0,2}))(.*)$/s);
-    if (!match) return token;
-    const prefix = match[1]; const body = match[2];
-    if (body.startsWith('#')) return prefix + translateTextPreservingWords(body, direction);
-    const quote = body[0]; const end = body[body.length - 1];
-    if ((quote !== '"' && quote !== "'") || end !== quote) return token;
-    return prefix + quote + translateTextPreservingWords(body.slice(1, -1), direction) + quote;
-  });
+  let output = ''; let i = 0;
+  while (i < source.length) {
+    if (source[i] === '#') {
+      const end = source.indexOf('\\n', i);
+      const stop = end === -1 ? source.length : end;
+      output += translateTextPreservingWords(source.slice(i, stop), direction); i = stop; continue;
+    }
+    const candidate = source.slice(i).match(/^([rubfRUBF]{0,2})('''|\\"\\"\\"|'\\"|')/);
+    if (!candidate) { output += source[i++]; continue; }
+    const prefix = candidate[1]; const delimiter = candidate[2]; const start = i + candidate[0].length;
+    let j = start;
+    while (j < source.length) {
+      if (source[j] === '\\\\') { j += 2; continue; }
+      if (source.startsWith(delimiter, j)) break;
+      j++;
+    }
+    if (j >= source.length) { output += source.slice(i); break; }
+    const body = source.slice(start, j);
+    output += candidate[0] + translatePythonStringBody(body, prefix, direction) + delimiter;
+    i = j + delimiter.length;
+  }
+  return output;
 }
 
 function translatePythonCode() {
