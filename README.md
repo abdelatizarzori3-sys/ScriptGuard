@@ -22,7 +22,7 @@ Then open `http://127.0.0.1:4173/`. The project currently uses CDN dependencies 
 
 ## API configuration
 
-The current frontend defaults to `http://localhost:3000`. For another deployment, set the runtime configuration before loading the page or update the API configuration in `app.js` to point to a server that implements the documented analysis and authentication routes. Never place API keys, passwords, or provider credentials in this repository or in browser code.
+The current frontend defaults to `http://localhost:3000`. The repository now includes an optional deployable `server.mjs` API. Run it with `PORT=3000 node server.mjs`; configure `OPENAI_API_BASE`, `OPENAI_API_KEY`, `LLM_MODEL`, and `ALLOWED_ORIGIN` only as server environment variables. It exposes `GET /api/health`, `POST /api/analyze`, and `POST /api/translate`. The browser translator remains structure-first and local by default; the API translator is available for a deployment that has been reviewed for privacy and credentials. Never place API keys, passwords, or provider credentials in this repository or in browser code.
 
 ## Privacy and safety
 
