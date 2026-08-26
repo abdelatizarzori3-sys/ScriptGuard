@@ -30,3 +30,7 @@ cd android
 ملف النشر المتوقع هو `android/app/build/outputs/bundle/release/app-release.aab`.
 
 ملاحظة: GitHub Pages لا تشغّل `server.mjs`. لذلك يلزم خادم Node عام حتى تعمل ميزات التحليل والترجمة داخل التطبيق.
+
+## Developer
+
+**Abdelati Zarzori** — `abdelatizarzori3@gmail.com`

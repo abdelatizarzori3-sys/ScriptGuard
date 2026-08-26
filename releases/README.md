@@ -6,3 +6,5 @@
 - `ScriptGuard-release.aab`: حزمة Android App Bundle للتحقق والنشر.
 
 يجب استخدام keystore إنتاجي محفوظ خارج GitHub قبل نشر AAB على Google Play. يبقى خادم التحليل مستقلًا ويحتاج عنوان API عامًا.
+
+Developer: **Abdelati Zarzori** — `abdelatizarzori3@gmail.com`

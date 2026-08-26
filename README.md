@@ -41,3 +41,7 @@ Run `npm run test:translator` to exercise comments, docstrings, triple-quoted st
 ## License
 
 Add a project license before public redistribution.
+
+## Developer contact
+
+**Abdelati Zarzori** — product owner and lead developer. Contact: `abdelatizarzori3@gmail.com`.
