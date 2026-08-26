@@ -500,11 +500,16 @@ function analyzePastedCode() {
 }
 
 function loadDemo(type) {
-  const demos = { safe: MockData.safe, vulnerable: MockData.vulnerable, slow: MockData.slow };
+  const demos = {
+    safe: { fileName: 'safe_example.py', code: 'def total(numbers):\n    """إرجاع مجموع أرقام صحيحة فقط."""\n    return sum(value for value in numbers if isinstance(value, int))\n' },
+    vulnerable: { fileName: 'review_example.py', code: 'import os\n\ndef read_value(user_input):\n    token = "demo-token-not-for-production"\n    return eval(user_input)\n' },
+    slow: { fileName: 'performance_example.py', code: 'def common_values(first, second):\n    output = []\n    for item in first:\n        for other in second:\n            if item == other:\n                output.append(item)\n    return output\n' }
+  };
   const demo = demos[type]; if (!demo) return;
-  $('code-textarea').value = demo.fixCode.substring(0, 300) + '\n// ...';
+  $('code-textarea').value = demo.code;
   $('char-count').textContent = $('code-textarea').value.length + ' حرف';
-  startAnalysis(null, demo.fileName, demo);
+  switchTab('paste');
+  startAnalysis(demo.code, demo.fileName);
 }
 
 async function startAnalysis(code, fileName, preloaded = null) {
