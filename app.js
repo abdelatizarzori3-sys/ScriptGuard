@@ -5,7 +5,7 @@
  */
 
 const CONFIG = {
-  API_BASE: window.SCRIPTGUARD_API_BASE || localStorage.getItem('sg_api_base') || 'http://localhost:3000',
+  API_BASE: window.SCRIPTGUARD_API_BASE || localStorage.getItem('sg_api_base') || 'https://marokecho-jrrh7cuh.manus.space',
   MAX_FILE_SIZE: 5 * 1024 * 1024,
   SUPPORTED_EXTS: ['.py','.js','.ts','.cs','.gd','.java','.go','.php','.rb','.cpp','.c','.h'],
   DEMO_MODE: false, LLM_READY: false
@@ -14,7 +14,6 @@ const CONFIG = {
 const State = {
   tab: 'upload', analyzing: false, result: null, filter: 'all',
   user: JSON.parse(localStorage.getItem('sg_user') || 'null'),
-  token: localStorage.getItem('sg_token') || null,
   zipFiles: []
 };
 
@@ -67,7 +66,7 @@ const $ = id => document.getElementById(id);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 document.addEventListener('DOMContentLoaded', () => {
-  initParticles(); initDragDrop(); initKeyboard(); initCharCount(); checkApiStatus(); updateAuthUI();
+  initParticles(); initDragDrop(); initKeyboard(); initCharCount(); checkApiStatus(); restoreSession();
 });
 
 function initParticles() {
@@ -108,49 +107,36 @@ function initCharCount() {
 function showLoginModal() { $('login-modal').classList.remove('hidden'); $('login-modal').classList.add('flex'); }
 function hideLoginModal() { $('login-modal').classList.add('hidden'); $('login-modal').classList.remove('flex'); }
 
-async function login() {
-  const email = $('login-email').value.trim();
-  const password = $('login-password').value;
-  if (!email || !password) { showToast('⚠️ أدخل البريد وكلمة المرور', 'warning'); return; }
-  try {
-    const res = await fetch(`${CONFIG.API_BASE}/api/auth/login`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password })
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'فشل تسجيل الدخول');
-    State.token = data.token; State.user = data.user;
-    localStorage.setItem('sg_token', data.token);
-    localStorage.setItem('sg_user', JSON.stringify(data.user));
-    updateAuthUI(); hideLoginModal();
-    showToast('✅ تم تسجيل الدخول بنجاح!', 'success');
-    loadHistory();
-  } catch (err) { showToast('❌ ' + err.message, 'error'); }
+function startSecureLogin() {
+  const loginUrl = new URL('/api/oauth/start', CONFIG.API_BASE);
+  loginUrl.searchParams.set('returnTo', window.location.href);
+  window.location.assign(loginUrl.toString());
 }
 
-async function signup() {
-  const email = $('login-email').value.trim();
-  const password = $('login-password').value;
-  if (!email || !password) { showToast('⚠️ أدخل البريد وكلمة المرور', 'warning'); return; }
-  if (password.length < 6) { showToast('⚠️ كلمة المرور يجب أن تكون 6 أحرف على الأقل', 'warning'); return; }
+async function restoreSession() {
   try {
-    const res = await fetch(`${CONFIG.API_BASE}/api/auth/signup`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password })
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'فشل إنشاء الحساب');
-    State.token = data.token; State.user = data.user;
-    localStorage.setItem('sg_token', data.token);
-    localStorage.setItem('sg_user', JSON.stringify(data.user));
-    updateAuthUI(); hideLoginModal();
-    showToast('✅ تم إنشاء الحساب بنجاح!', 'success');
-  } catch (err) { showToast('❌ ' + err.message, 'error'); }
+    const response = await fetch(`${CONFIG.API_BASE}/api/trpc/auth.me?batch=1`, { credentials: 'include' });
+    const payload = await response.json();
+    State.user = payload?.[0]?.result?.data?.json || null;
+    if (State.user) localStorage.setItem('sg_user', JSON.stringify(State.user));
+    else localStorage.removeItem('sg_user');
+  } catch {
+    State.user = null;
+    localStorage.removeItem('sg_user');
+  }
+  updateAuthUI();
 }
 
-function logout() {
-  State.token = null; State.user = null;
-  localStorage.removeItem('sg_token');
+async function logout() {
+  try {
+    await fetch(`${CONFIG.API_BASE}/api/trpc/auth.logout?batch=1`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ 0: { json: null } })
+    });
+  } catch { /* Local UI must still clear a stale session display. */ }
+  State.user = null;
   localStorage.removeItem('sg_user');
   updateAuthUI();
   showToast('👋 تم تسجيل الخروج', 'success');
@@ -167,16 +153,29 @@ async function checkApiStatus() {
   const dot = $('api-dot');
   const text = $('api-text');
   try {
-    const res = await fetch(`${CONFIG.API_BASE}/api/health`, { method: 'GET', signal: AbortSignal.timeout(3000) });
-    const health = await res.json().catch(() => ({}));
-    if (res.ok) { CONFIG.LLM_READY = Boolean(health.llmConfigured); CONFIG.DEMO_MODE = !CONFIG.LLM_READY; dot.className = 'w-2 h-2 rounded-full bg-green-500'; text.textContent = CONFIG.LLM_READY ? 'متصل بالخادم — الذكاء الاصطناعي متاح' : 'الخادم متصل — الترجمة المحلية الاحتياطية'; text.className = CONFIG.LLM_READY ? 'text-green-400' : 'text-yellow-400'; }
+    const input = encodeURIComponent(JSON.stringify({ 0: { json: { timestamp: Date.now() } } }));
+    const res = await fetch(`${CONFIG.API_BASE}/api/trpc/system.health?batch=1&input=${input}`, { method: 'GET', signal: AbortSignal.timeout(5000) });
+    const health = await res.json().catch(() => null);
+    if (res.ok && health?.[0]?.result?.data?.json?.ok) { CONFIG.LLM_READY = true; CONFIG.DEMO_MODE = false; dot.className = 'w-2 h-2 rounded-full bg-green-500'; text.textContent = 'متصل بالخادم — التحليل الذكي متاح'; text.className = 'text-green-400'; }
     else throw new Error();
   } catch {
-    dot.className = 'w-2 h-2 rounded-full bg-yellow-500 animate-pulse';
-    text.textContent = 'وضع العرض التجريبي (لا يوجد خادم)';
-    text.className = 'text-yellow-400';
-    CONFIG.DEMO_MODE = true; CONFIG.LLM_READY = false;
+    dot.className = 'w-2 h-2 rounded-full bg-red-500';
+    text.textContent = 'الخادم غير متاح — لن تُعرض نتائج تجريبية';
+    text.className = 'text-red-400';
+    CONFIG.DEMO_MODE = false; CONFIG.LLM_READY = false;
   }
+}
+
+async function requestCodeAnalysis(code, fileName) {
+  const response = await fetch(`${CONFIG.API_BASE}/api/trpc/ai.codeAnalyze?batch=1`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+    body: JSON.stringify({ 0: { json: { code, fileName, language: detectLanguage(fileName) } } })
+  });
+  const payload = await response.json().catch(() => null);
+  const result = payload?.[0]?.result?.data?.json;
+  if (!response.ok || !result) throw new Error('تعذر الوصول إلى خدمة التحليل.');
+  return result;
 }
 
 function switchTab(tab) {
@@ -480,16 +479,13 @@ async function startAnalysis(code, fileName, preloaded = null) {
 
   if (!resultData && !CONFIG.DEMO_MODE && code) {
     try {
-      const res = await fetch(`${CONFIG.API_BASE}/api/analyze`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...(State.token ? { 'Authorization': `Bearer ${State.token}` } : {}) },
-        body: JSON.stringify({ code, fileName, language: detectLanguage(fileName) })
-      });
-      if (!res.ok) throw new Error('API Error');
-      resultData = await res.json();
+      resultData = await requestCodeAnalysis(code, fileName);
     } catch (err) {
-      console.warn('API failed, falling back to mock:', err);
-      resultData = determineMockResult(fileName, code);
+      console.error('ScriptGuard analysis failed:', err);
+      State.analyzing = false;
+      resetApp();
+      showToast('تعذر الاتصال بخدمة التحليل. تحقق من الإنترنت ثم أعد المحاولة.', 'error');
+      return;
     }
   } else if (!resultData) {
     resultData = determineMockResult(fileName, code);
@@ -682,19 +678,7 @@ function showToast(msg, type = 'success') {
 
 function escapeHtml(text) { const div = document.createElement('div'); div.textContent = text; return div.innerHTML; }
 
-function initRobotInterface() {
-  const stage = $('robot-stage'); const model = $('robot-model'); const status = $('robot-status-text');
-  if (!stage || !model) return;
-  const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-  const setPose = (x, y) => { if (reduced) return; model.style.transform = `rotateX(${y * -5}deg) rotateY(${x * 8}deg) translateZ(8px)`; };
-  stage.addEventListener('pointermove', event => { const rect = stage.getBoundingClientRect(); setPose((event.clientX - rect.left) / rect.width - .5, (event.clientY - rect.top) / rect.height - .5); });
-  stage.addEventListener('pointerleave', () => { model.style.transform = ''; });
-  stage.addEventListener('click', () => { model.classList.remove('robot-scan'); void model.offsetWidth; model.classList.add('robot-scan'); if (status) status.textContent = 'فحص بصري نشط — النواة تستجيب'; showToast('🤖 الروبوت جاهز لاستقبال أمرك', 'success'); });
-  stage.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); stage.click(); } });
-}
-
 console.log('🛡️ ScriptGuard AI Full-Stack v1.0');
 console.log('👤 Owner & Lead Developer: Abdelati Zarzori');
 console.log('💡 Tips: Ctrl+Enter = Analyze | Escape = Reset');
 console.log('🔌 API:', CONFIG.API_BASE);
-if (typeof document !== 'undefined') document.addEventListener('DOMContentLoaded', initRobotInterface);

@@ -122,16 +122,11 @@
             <i class="fas fa-shield-halved text-2xl text-cyan-400"></i>
           </div>
           <h3 class="text-xl font-bold">تسجيل الدخول</h3>
-          <p class="text-sm text-gray-400 mt-1">سجل لتخزين سجل فحوصاتك</p>
+          <p class="text-sm text-gray-400 mt-1">سجّل بأمان عبر حساب Manus؛ لا نخزّن كلمة مرور داخل ScriptGuard</p>
         </div>
         <div class="space-y-3">
-          <input id="login-email" type="email" placeholder="بريدك الإلكتروني" class="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder-gray-500 focus:border-cyan-500 focus:outline-none text-sm">
-          <input id="login-password" type="password" placeholder="كلمة المرور" class="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder-gray-500 focus:border-cyan-500 focus:outline-none text-sm">
-          <button onclick="login()" class="w-full py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 font-bold text-sm hover:from-cyan-400 hover:to-blue-500 transition shadow-lg shadow-cyan-500/25 nb">
-            <i class="fas fa-sign-in-alt mr-2"></i> دخول
-          </button>
-          <button onclick="signup()" class="w-full py-3 rounded-xl glass font-bold text-sm hover:bg-white/10 transition">
-            <i class="fas fa-user-plus mr-2"></i> إنشاء حساب
+          <button onclick="startSecureLogin()" class="w-full py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 font-bold text-sm hover:from-cyan-400 hover:to-blue-500 transition shadow-lg shadow-cyan-500/25 nb">
+            <i class="fas fa-shield-halved mr-2"></i> متابعة بتسجيل الدخول الآمن
           </button>
         </div>
         <button onclick="hideLoginModal()" class="mt-4 text-xs text-gray-500 hover:text-gray-300 w-full text-center">إغلاق</button>
@@ -184,20 +179,11 @@
     </div>
 
     <main class="flex-1 max-w-6xl mx-auto w-full px-4 py-6 sm:py-10">
-      <section class="robot-hero animate-fade-in" aria-label="واجهة الروبوت المستقبلي">
-        <div class="robot-copy">
-          <span class="robot-kicker">SCRIPTGUARD // SENTINEL CORE</span>
-          <h2>روبوتك الذكي، حاضر لفهم كل فكرة</h2>
-          <p>واجهة مستقبلية موحدة للمحادثة، تحليل الأكواد، الترجمة، وإدارة المهام. يتفاعل معك بصريًا، بينما تبقى الأفعال الخارجية تحت تأكيدك.</p>
-          <div class="robot-status"><i class="fas fa-circle-nodes"></i><span id="robot-status-text">النواة جاهزة — بانتظار أمرك</span><span class="px-2 py-1 rounded-full bg-cyan-400/10 text-cyan-300 border border-cyan-400/20">AI</span></div>
-        </div>
-        <div id="robot-stage" class="robot-stage" tabindex="0" role="button" aria-label="تفاعل مع الروبوت ثلاثي الأبعاد">
-          <div id="robot-model" class="robot-model" role="img" aria-label="روبوت مستقبلي معدني">
-            <div class="robot-head"></div><div class="robot-neck"></div><div class="robot-torso"></div>
-            <div class="robot-arm left"><span class="robot-hand"></span></div><div class="robot-arm right"><span class="robot-hand"></span></div>
-            <div class="robot-hips"></div><div class="robot-leg left"></div><div class="robot-leg right"></div>
-          </div>
-        </div>
+      <section class="glass-s rounded-3xl border border-cyan-400/20 p-6 sm:p-10 text-center mb-8 animate-fade-in" aria-label="مقدمة ScriptGuard">
+        <div class="w-16 h-16 mx-auto mb-4 rounded-2xl bg-cyan-500/15 border border-cyan-400/25 flex items-center justify-center"><i class="fas fa-shield-halved text-3xl text-cyan-300"></i></div>
+        <p class="text-[11px] tracking-[.22em] text-cyan-300">SCRIPTGUARD // CODE REVIEW</p>
+        <h2 class="mt-3 text-2xl sm:text-4xl font-extrabold">حارس الأكواد الذكي</h2>
+        <p class="mt-3 max-w-2xl mx-auto text-sm sm:text-base text-gray-400 leading-8">حلّل ملفك أو الصق الشيفرة للحصول على مراجعة أمنية وجودة وأداء مبنية على الخدمة الفعلية. لا توجد دردشة روبوت أو عناصر Sentinel في هذا التطبيق.</p>
       </section>
       <div id="welcome-section" class="text-center mb-8 animate-fade-in">
         <div class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 text-xs mb-4">
