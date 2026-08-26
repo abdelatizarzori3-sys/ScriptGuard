@@ -101,7 +101,7 @@
         <div class="flex items-center gap-2">
           <div id="user-badge" class="hidden items-center gap-2">
             <span class="text-xs text-gray-400 bg-white/5 px-3 py-1.5 rounded-full border border-white/10">
-              <i class="fas fa-bolt text-yellow-400 mr-1"></i> Pro
+              <i class="fas fa-user-shield text-yellow-400 mr-1"></i><span id="user-name">ملفي</span>
             </span>
             <button onclick="logout()" class="text-xs text-red-400 hover:text-red-300 px-2 py-1">خروج</button>
           </div>
@@ -121,13 +121,12 @@
           <div class="w-16 h-16 mx-auto mb-3 rounded-2xl bg-gradient-to-br from-cyan-500/20 to-blue-500/20 flex items-center justify-center border border-cyan-500/20">
             <i class="fas fa-shield-halved text-2xl text-cyan-400"></i>
           </div>
-          <h3 class="text-xl font-bold">تسجيل الدخول</h3>
-          <p class="text-sm text-gray-400 mt-1">سجّل بأمان عبر حساب Manus؛ لا نخزّن كلمة مرور داخل ScriptGuard</p>
+          <h3 class="text-xl font-bold">ملف ScriptGuard الخاص</h3>
+          <p class="text-sm text-gray-400 mt-1">ملفك يبقى داخل التطبيق على هذا الهاتف. لا يفتح Manus ولا نطلب كلمة مرور أو حسابًا خارجيًا.</p>
         </div>
         <div class="space-y-3">
-          <button onclick="startSecureLogin()" class="w-full py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 font-bold text-sm hover:from-cyan-400 hover:to-blue-500 transition shadow-lg shadow-cyan-500/25 nb">
-            <i class="fas fa-shield-halved mr-2"></i> متابعة بتسجيل الدخول الآمن
-          </button>
+          <input id="app-display-name" type="text" autocomplete="name" maxlength="80" placeholder="الاسم الظاهر داخل التطبيق" class="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder-gray-500 focus:border-cyan-500 focus:outline-none text-sm">
+          <button onclick="saveLocalProfile()" class="w-full py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 font-bold text-sm hover:from-cyan-400 hover:to-blue-500 transition shadow-lg shadow-cyan-500/25 nb"><i class="fas fa-user-check mr-2"></i> حفظ الملف داخل التطبيق</button>
         </div>
         <button onclick="hideLoginModal()" class="mt-4 text-xs text-gray-500 hover:text-gray-300 w-full text-center">إغلاق</button>
       </div>

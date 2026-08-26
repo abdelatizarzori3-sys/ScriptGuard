@@ -107,35 +107,20 @@ function initCharCount() {
 function showLoginModal() { $('login-modal').classList.remove('hidden'); $('login-modal').classList.add('flex'); }
 function hideLoginModal() { $('login-modal').classList.add('hidden'); $('login-modal').classList.remove('flex'); }
 
-function startSecureLogin() {
-  const loginUrl = new URL('/api/oauth/start', CONFIG.API_BASE);
-  loginUrl.searchParams.set('returnTo', window.location.href);
-  window.location.assign(loginUrl.toString());
-}
-
 async function restoreSession() {
-  try {
-    const response = await fetch(`${CONFIG.API_BASE}/api/trpc/auth.me?batch=1`, { credentials: 'include' });
-    const payload = await response.json();
-    State.user = payload?.[0]?.result?.data?.json || null;
-    if (State.user) localStorage.setItem('sg_user', JSON.stringify(State.user));
-    else localStorage.removeItem('sg_user');
-  } catch {
-    State.user = null;
-    localStorage.removeItem('sg_user');
-  }
   updateAuthUI();
 }
 
-async function logout() {
-  try {
-    await fetch(`${CONFIG.API_BASE}/api/trpc/auth.logout?batch=1`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ 0: { json: null } })
-    });
-  } catch { /* Local UI must still clear a stale session display. */ }
+function saveLocalProfile() {
+  const displayName = $('app-display-name')?.value.trim();
+  if (!displayName || displayName.length < 2) return showToast('⚠️ أدخل اسمًا من حرفين على الأقل.', 'warning');
+  State.user = { displayName, localProfile: true };
+  localStorage.setItem('sg_user', JSON.stringify(State.user));
+  updateAuthUI(); hideLoginModal();
+  showToast('✅ تم حفظ ملفك الخاص داخل التطبيق.', 'success');
+}
+
+function logout() {
   State.user = null;
   localStorage.removeItem('sg_user');
   updateAuthUI();
@@ -145,7 +130,7 @@ async function logout() {
 function updateAuthUI() {
   const badge = $('user-badge');
   const btn = $('login-btn');
-  if (State.user) { badge.classList.remove('hidden'); badge.classList.add('flex'); btn.classList.add('hidden'); }
+  if (State.user) { $('user-name').textContent = State.user.displayName || State.user.name || 'ملفي'; badge.classList.remove('hidden'); badge.classList.add('flex'); btn.classList.add('hidden'); }
   else { badge.classList.add('hidden'); badge.classList.remove('flex'); btn.classList.remove('hidden'); }
 }
 
