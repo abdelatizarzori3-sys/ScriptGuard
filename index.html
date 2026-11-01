@@ -154,14 +154,28 @@
             <span class="block text-xs text-gray-500 mt-1">يتم الحفاظ على المسارات الداخلية للمجلد</span>
           </label>
           <input id="zip-folder-input" type="file" webkitdirectory directory multiple class="hidden" onchange="handleZipFiles(event)">
-          <div class="flex items-center justify-between text-xs text-gray-400"><span id="zip-file-count">0 ملف</span><button onclick="clearZipFiles()" class="text-red-300 hover:text-red-200">إزالة الكل</button></div>
-          <div id="zip-file-list" class="space-y-2 min-h-20 rounded-xl border border-white/10 bg-black/10 p-3" aria-live="polite">
-            <p class="text-center text-sm text-gray-500 py-5">لم تتم إضافة ملفات بعد</p>
-          </div>
-          <section id="file-editor" class="hidden rounded-xl border border-cyan-400/20 bg-black/20 p-3" aria-labelledby="file-editor-title">
-            <div class="flex items-center justify-between gap-3 mb-2">
-              <h3 id="file-editor-title" class="text-sm font-semibold text-cyan-200 truncate">محرر الملف</h3>
-              <span id="file-editor-status" class="text-[11px] text-gray-500">قراءة محلية</span>
+	          <div class="flex items-center justify-between text-xs text-gray-400"><span id="zip-file-count">0 ملف</span><button onclick="clearZipFiles()" class="text-red-300 hover:text-red-200">إزالة الكل</button></div>
+	          <div id="zip-file-list" class="space-y-2 min-h-20 rounded-xl border border-white/10 bg-black/10 p-3" aria-live="polite">
+	            <p class="text-center text-sm text-gray-500 py-5">لم تتم إضافة ملفات بعد</p>
+	          </div>
+	          <section class="rounded-xl border border-amber-400/20 bg-amber-500/5 p-4 space-y-3" aria-labelledby="aggregate-report-title">
+	            <div class="flex flex-wrap items-start justify-between gap-2">
+	              <div>
+	                <h3 id="aggregate-report-title" class="text-sm font-bold text-amber-100 flex items-center gap-2"><i class="fas fa-file-circle-check text-amber-300"></i> تقرير مراجعة مجمع <span class="px-2 py-0.5 rounded-full bg-amber-400/15 text-[10px] text-amber-200 border border-amber-400/30">Pro</span></h3>
+	                <p class="mt-1 text-[11px] leading-relaxed text-gray-400">يفحص حتى 25 ملفًا من الحزمة بقواعد محلية فعلية موسومة بمصدرها. لا تُرسل الشيفرة عند التحقق من الاشتراك، ولا يمثل التقرير تدقيقًا أمنيًا مضمونًا.</p>
+	              </div>
+	            </div>
+	            <p id="aggregate-report-status" class="rounded-lg border border-white/10 bg-black/10 px-3 py-2 text-xs leading-relaxed text-gray-400" role="status" aria-live="polite">أضف ملفين مصدر مدعومين على الأقل لإعداد التقرير المجمع.</p>
+	            <button id="aggregate-report-prepare" type="button" onclick="prepareAggregateReport()" class="w-full py-2.5 rounded-lg bg-gradient-to-r from-amber-500/80 to-orange-500/80 hover:from-amber-400 hover:to-orange-400 text-sm font-bold transition flex items-center justify-center gap-2"><i class="fas fa-lock"></i> تحقق من Pro وأعد التقرير المحلي</button>
+	            <div id="aggregate-report-actions" class="hidden grid grid-cols-1 sm:grid-cols-2 gap-2">
+	              <button type="button" onclick="downloadAggregateReport('markdown')" class="py-2.5 rounded-lg bg-white/10 border border-white/10 hover:bg-white/15 text-sm font-semibold"><i class="fas fa-file-lines text-cyan-300 ml-1"></i> تنزيل Markdown</button>
+	              <button type="button" onclick="downloadAggregateReport('json')" class="py-2.5 rounded-lg bg-white/10 border border-white/10 hover:bg-white/15 text-sm font-semibold"><i class="fas fa-brackets-curly text-cyan-300 ml-1"></i> تنزيل JSON</button>
+	            </div>
+	          </section>
+	          <section id="file-editor" class="hidden rounded-xl border border-cyan-400/20 bg-black/20 p-3" aria-labelledby="file-editor-title">
+	            <div class="flex items-center justify-between gap-3 mb-2">
+	              <h3 id="file-editor-title" class="text-sm font-semibold text-cyan-200 truncate">محرر الملف</h3>
+	              <span id="file-editor-status" class="text-[11px] text-gray-500">قراءة محلية</span>
             </div>
             <textarea id="file-editor-text" class="ce w-full h-48 rounded-lg p-3 text-sm text-gray-200 resize-y focus:outline-none" spellcheck="false" aria-label="محتوى الملف"></textarea>
             <div class="flex justify-end gap-2 mt-3">
@@ -409,10 +423,11 @@
     </footer>
   </div>
 
-  <div id="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 px-6 py-3 rounded-xl glass-s border border-cyan-500/30 text-sm font-semibold transform translate-y-20 opacity-0 transition-all duration-300 z-50 flex items-center gap-2">
-    <i class="fas fa-check-circle text-cyan-400"></i><span id="toast-message">تم بنجاح!</span>
-  </div>
+	  <div id="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 px-6 py-3 rounded-xl glass-s border border-cyan-500/30 text-sm font-semibold transform translate-y-20 opacity-0 transition-all duration-300 z-50 flex items-center gap-2">
+	    <i class="fas fa-check-circle text-cyan-400"></i><span id="toast-message">تم بنجاح!</span>
+	  </div>
 
-  <script src="app.js"></script>
+	  <script src="pro-report.js"></script>
+	  <script src="app.js"></script>
 </body>
 </html>

@@ -5,6 +5,7 @@ const allowedOrigin = process.env.ALLOWED_ORIGIN || '*';
 const llmBase = (process.env.OPENAI_API_BASE || '').replace(/\/+$/, '');
 const llmKey = process.env.OPENAI_API_KEY || '';
 const model = process.env.LLM_MODEL || 'gpt-5-mini';
+const aggregateReportFeature = 'aggregate-review-export';
 
 const json = (res, status, payload) => {
   res.writeHead(status, {
@@ -44,12 +45,24 @@ const analysisSchema = {
 };
 
 async function route(req, res) {
+  const requestUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   if (req.method === 'OPTIONS') return json(res, 204, {});
-  if (req.method === 'GET' && req.url === '/api/health') return json(res, 200, { ok: true, llmConfigured: Boolean(llmBase && llmKey), model });
-  if (req.method !== 'POST' || !['/api/analyze', '/api/translate'].includes(req.url)) return json(res, 404, { error: 'Not found' });
+  if (req.method === 'GET' && requestUrl.pathname === '/api/health') return json(res, 200, { ok: true, llmConfigured: Boolean(llmBase && llmKey), model });
+  if (req.method === 'GET' && requestUrl.pathname === '/api/entitlements/me') {
+    if (requestUrl.searchParams.get('feature') !== aggregateReportFeature) {
+      return json(res, 400, { code: 'FEATURE_NOT_SUPPORTED', error: 'Unsupported entitlement feature.' });
+    }
+    // This repository has no account/session or billing verifier yet. Deliberately
+    // refuse the request rather than trusting localStorage, query parameters, or UI.
+    return json(res, 503, {
+      code: 'ENTITLEMENT_VERIFICATION_NOT_CONFIGURED',
+      error: 'Server-side account and verified subscription integration are required before Pro exports can be enabled.'
+    });
+  }
+  if (req.method !== 'POST' || !['/api/analyze', '/api/translate'].includes(requestUrl.pathname)) return json(res, 404, { error: 'Not found' });
   try {
     const body = await readBody(req);
-    if (req.url === '/api/analyze') {
+    if (requestUrl.pathname === '/api/analyze') {
       if (typeof body.code !== 'string' || !body.code.trim()) return json(res, 400, { error: 'code is required' });
       const content = await invokeLLM([
         { role: 'system', content: 'You are ScriptGuard, a careful multilingual code reviewer. Return JSON only. Analyze security, performance, and quality. Never invent issues; quote exact lines when possible. Keep fixCode syntactically valid and preserve behavior.' },
