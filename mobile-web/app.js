@@ -6,6 +6,7 @@
 
 const CONFIG = {
   API_BASE: window.SCRIPTGUARD_API_BASE || localStorage.getItem('sg_api_base') || 'https://marokecho-jrrh7cuh.manus.space',
+  ENTITLEMENT_API_BASE: window.SCRIPTGUARD_ENTITLEMENT_API_BASE || window.SCRIPTGUARD_API_BASE || window.location?.origin || '',
   MAX_FILE_SIZE: 5 * 1024 * 1024,
   SUPPORTED_EXTS: ['.py','.js','.ts','.cs','.gd','.java','.go','.php','.rb','.cpp','.c','.h'],
   DEMO_MODE: false, LLM_READY: false
@@ -14,8 +15,10 @@ const CONFIG = {
 const State = {
   tab: 'upload', analyzing: false, result: null, filter: 'all',
   user: JSON.parse(localStorage.getItem('sg_user') || 'null'),
-  zipFiles: []
+  zipFiles: [], aggregateReview: null, aggregateBusy: false
 };
+
+const ProReports = window.ScriptGuardProReports;
 
 const MockData = {
   safe: {

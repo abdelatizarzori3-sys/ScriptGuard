@@ -6,6 +6,7 @@
 
 const CONFIG = {
   API_BASE: window.SCRIPTGUARD_API_BASE || localStorage.getItem('sg_api_base') || 'https://marokecho-jrrh7cuh.manus.space',
+  ENTITLEMENT_API_BASE: window.SCRIPTGUARD_ENTITLEMENT_API_BASE || window.SCRIPTGUARD_API_BASE || window.location?.origin || '',
   MAX_FILE_SIZE: 5 * 1024 * 1024,
   SUPPORTED_EXTS: ['.py','.js','.ts','.cs','.gd','.java','.go','.php','.rb','.cpp','.c','.h'],
   DEMO_MODE: false, LLM_READY: false
@@ -14,8 +15,10 @@ const CONFIG = {
 const State = {
   tab: 'upload', analyzing: false, result: null, filter: 'all',
   user: JSON.parse(localStorage.getItem('sg_user') || 'null'),
-  zipFiles: []
+  zipFiles: [], aggregateReview: null, aggregateBusy: false
 };
+
+const ProReports = window.ScriptGuardProReports;
 
 const MockData = {
   safe: {
@@ -282,6 +285,7 @@ function showFileManager() {
   modal.classList.remove('hidden');
   modal.classList.add('flex');
   renderZipFiles();
+  renderAggregateReportState();
 }
 
 function hideFileManager() {
@@ -302,17 +306,23 @@ function handleZipFiles(e) {
     }
   });
   e.target.value = '';
+  State.aggregateReview = null;
   renderZipFiles();
+  renderAggregateReportState();
 }
 
 function removeZipFile(index) {
   State.zipFiles.splice(index, 1);
+  State.aggregateReview = null;
   renderZipFiles();
+  renderAggregateReportState();
 }
 
 function clearZipFiles() {
   State.zipFiles = [];
+  State.aggregateReview = null;
   renderZipFiles();
+  renderAggregateReportState();
 }
 
 function formatBytes(bytes) {
@@ -391,7 +401,9 @@ function saveEditedFile() {
   item.text = textarea.value;
   item.file = new File([item.text], item.file.name, { type: item.file.type || 'text/plain', lastModified: Date.now() });
   if (status) status.textContent = 'تم الحفظ محليًا داخل الحزمة';
+  State.aggregateReview = null;
   renderZipFiles();
+  renderAggregateReportState();
   showToast('✅ تم حفظ التعديلات محليًا', 'success');
 }
 
@@ -420,6 +432,171 @@ async function downloadZip() {
     console.error('ZIP creation failed', err);
     showToast('❌ تعذر إنشاء ملف ZIP', 'error');
   }
+}
+
+function aggregateSourceFiles() {
+  return State.zipFiles.filter(item => {
+    const extension = '.' + String(item.file?.name || '').split('.').pop().toLowerCase();
+    return CONFIG.SUPPORTED_EXTS.includes(extension) && item.file.size <= CONFIG.MAX_FILE_SIZE;
+  });
+}
+
+function setAggregateReportStatus(message, kind = 'muted') {
+  const status = $('aggregate-report-status');
+  if (!status) return;
+  const classes = {
+    muted: 'border-white/10 bg-black/10 text-gray-400',
+    busy: 'border-cyan-400/30 bg-cyan-500/10 text-cyan-100',
+    success: 'border-emerald-400/30 bg-emerald-500/10 text-emerald-100',
+    warning: 'border-amber-400/30 bg-amber-500/10 text-amber-100',
+    error: 'border-red-400/30 bg-red-500/10 text-red-100'
+  };
+  status.className = `rounded-lg border px-3 py-2 text-xs leading-relaxed ${classes[kind] || classes.muted}`;
+  status.textContent = message;
+}
+
+function renderAggregateReportState() {
+  const actions = $('aggregate-report-actions');
+  const prepare = $('aggregate-report-prepare');
+  if (!actions || !prepare) return;
+  prepare.disabled = State.aggregateBusy;
+  prepare.classList.toggle('opacity-60', State.aggregateBusy);
+  prepare.classList.toggle('cursor-wait', State.aggregateBusy);
+  if (State.aggregateBusy) {
+    actions.classList.add('hidden');
+    setAggregateReportStatus('جارٍ التحقق من الاستحقاق وإعداد نتائج القواعد المحلية على هذا الجهاز…', 'busy');
+    return;
+  }
+  if (State.aggregateReview) {
+    actions.classList.remove('hidden');
+    setAggregateReportStatus(`التقرير المجمع جاهز لـ ${State.aggregateReview.summary.reviewedFiles} ملفات. سيعاد التحقق من الاستحقاق عند كل تنزيل.`, 'success');
+    return;
+  }
+  actions.classList.add('hidden');
+  const eligible = aggregateSourceFiles();
+  if (eligible.length < 2) {
+    setAggregateReportStatus('أضف ملفين مصدر مدعومين على الأقل (بحد أقصى 5 م.ب للملف) لإعداد تقرير مراجعة مجمع.', 'muted');
+  } else if (eligible.length > (ProReports?.MAX_BATCH_FILES || 25)) {
+    setAggregateReportStatus(`اختر حتى ${ProReports?.MAX_BATCH_FILES || 25} ملفًا مصدرًا للتقرير المجمع.`, 'warning');
+  } else {
+    setAggregateReportStatus('ميزة Pro: سيجري التحقق الخادمي من الاشتراك قبل قراءة الملفات أو إعداد التصدير.', 'muted');
+  }
+}
+
+function entitlementMessage(code) {
+  const messages = {
+    AUTH_REQUIRED: 'يلزم حساب خادمي موثّق للتحقق من الاستحقاق؛ الملف المحلي لا يثبت الاشتراك.',
+    ENTITLEMENT_MISSING: 'لا يوجد اشتراك نشط مخوّل لتقرير المراجعة المجمع.',
+    ENTITLEMENT_INACTIVE: 'اشتراك Pro غير نشط؛ تعذر تنزيل التقرير.',
+    SUBSCRIPTION_CANCELED: 'تم إلغاء الاشتراك أو انتهت صلاحيته؛ تعذر تنزيل التقرير.',
+    SUBSCRIPTION_EXPIRED: 'انتهت صلاحية الاشتراك؛ تعذر تنزيل التقرير.',
+    ENTITLEMENT_UNVERIFIED: 'لم يقدم الخادم استحقاق اشتراك موثّقًا؛ تم قفل الميزة.',
+    ENTITLEMENT_VERIFICATION_NOT_CONFIGURED: 'إعداد شراء الاشتراك والتحقق الخادمي مطلوب قبل إتاحة ميزة Pro.',
+    VERIFICATION_UNAVAILABLE: 'تعذر الوصول إلى خدمة التحقق من الاشتراك؛ تم قفل الميزة احترازيًا.',
+    CLIENT_UNAVAILABLE: 'تعذر تحميل نواة التقرير؛ تم قفل الميزة احترازيًا.'
+  };
+  return messages[code] || 'تعذر التحقق من استحقاق Pro؛ تم قفل الميزة احترازيًا.';
+}
+
+async function verifyAggregateReportEntitlement() {
+  if (!ProReports?.decisionForEntitlement) return { allowed: false, code: 'CLIENT_UNAVAILABLE' };
+  const base = String(CONFIG.ENTITLEMENT_API_BASE || window.location?.origin || '').replace(/\/+$/, '');
+  if (!base) return { allowed: false, code: 'VERIFICATION_UNAVAILABLE' };
+  const url = `${base}/api/entitlements/me?feature=${encodeURIComponent(ProReports.FEATURE_ID)}`;
+  try {
+    const response = await fetch(url, { method: 'GET', credentials: 'include', headers: { Accept: 'application/json' }, cache: 'no-store' });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) return { allowed: false, code: typeof payload?.code === 'string' ? payload.code : 'VERIFICATION_UNAVAILABLE' };
+    return ProReports.decisionForEntitlement(payload);
+  } catch {
+    return { allowed: false, code: 'VERIFICATION_UNAVAILABLE' };
+  }
+}
+
+async function prepareAggregateReport() {
+  if (State.aggregateBusy) return;
+  if (!ProReports?.analyzeLocalRules || !ProReports?.createAggregateReview) {
+    setAggregateReportStatus(entitlementMessage('CLIENT_UNAVAILABLE'), 'error');
+    return;
+  }
+  const files = aggregateSourceFiles();
+  if (files.length < 2) {
+    setAggregateReportStatus('أضف ملفين مصدر مدعومين على الأقل قبل إعداد التقرير المجمع.', 'warning');
+    return;
+  }
+  if (files.length > ProReports.MAX_BATCH_FILES) {
+    setAggregateReportStatus(`الحد الأقصى للتقرير المجمع هو ${ProReports.MAX_BATCH_FILES} ملفًا. أزل الملفات الزائدة ثم أعد المحاولة.`, 'warning');
+    return;
+  }
+
+  State.aggregateBusy = true;
+  State.aggregateReview = null;
+  renderAggregateReportState();
+  const entitlement = await verifyAggregateReportEntitlement();
+  if (!entitlement.allowed) {
+    State.aggregateBusy = false;
+    renderAggregateReportState();
+    setAggregateReportStatus(entitlementMessage(entitlement.code), 'warning');
+    showToast('ميزة التقرير المجمع مقفلة حتى يثبت الخادم اشتراك Pro.', 'warning');
+    return;
+  }
+
+  try {
+    let characters = 0;
+    const analyses = [];
+    let skipped = 0;
+    for (const item of files) {
+      const text = item.text !== null ? item.text : await item.file.text();
+      if (!text.trim() || text.includes('\u0000') || characters + text.length > ProReports.MAX_TOTAL_CHARACTERS) {
+        skipped += 1;
+        continue;
+      }
+      characters += text.length;
+      analyses.push(ProReports.analyzeLocalRules(text, item.path));
+    }
+    if (analyses.length < 2) {
+      throw new Error('لم يتبق ملفان نصيان صالحان ضمن حدود التقرير المجمع.');
+    }
+    State.aggregateReview = ProReports.createAggregateReview(analyses, new Date());
+    State.aggregateBusy = false;
+    renderAggregateReportState();
+    if (skipped) setAggregateReportStatus(`التقرير المجمع جاهز لـ ${analyses.length} ملفات؛ تم استبعاد ${skipped} ملف غير نصي أو فارغ أو خارج الحد الإجمالي.`, 'warning');
+    showToast('تم إعداد تقرير قواعد محلية مجمع؛ اختر Markdown أو JSON.', 'success');
+  } catch (error) {
+    console.error('Aggregate review preparation failed:', error);
+    State.aggregateBusy = false;
+    State.aggregateReview = null;
+    renderAggregateReportState();
+    setAggregateReportStatus('تعذر إعداد التقرير المجمع. تأكد من أن الملفات نصية ومدعومة ثم أعد المحاولة.', 'error');
+  }
+}
+
+function downloadTextFile(content, filename, type) {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+async function downloadAggregateReport(format) {
+  if (!State.aggregateReview || !['markdown', 'json'].includes(format)) return;
+  const entitlement = await verifyAggregateReportEntitlement();
+  if (!entitlement.allowed) {
+    State.aggregateReview = null;
+    renderAggregateReportState();
+    setAggregateReportStatus(entitlementMessage(entitlement.code), 'warning');
+    showToast('تم قفل تنزيل تقرير Pro لعدم وجود استحقاق خادمي نشط.', 'warning');
+    return;
+  }
+  const date = new Date().toISOString().slice(0, 10);
+  const content = format === 'markdown' ? ProReports.toMarkdown(State.aggregateReview) : ProReports.toJson(State.aggregateReview);
+  downloadTextFile(content, `scriptguard-aggregate-review-${date}.${format === 'markdown' ? 'md' : 'json'}`, format === 'markdown' ? 'text/markdown;charset=utf-8' : 'application/json;charset=utf-8');
+  showToast(`تم تنزيل التقرير بصيغة ${format === 'markdown' ? 'Markdown' : 'JSON'} دون محتوى الملفات أو مساراتها.`, 'success');
 }
 
 function processFile(file) {

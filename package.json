@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "start": "node server.mjs",
-    "test:translator": "node translator.test.cjs"
+    "test:translator": "node translator.test.cjs",
+    "test:pro-report": "node tests/pro-report.test.mjs",
+    "test:entitlement": "node tests/entitlement-endpoint.test.mjs"
   },
   "engines": {
     "node": ">=20"
